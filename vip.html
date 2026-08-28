@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Go VIP | TipsHQ</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --pitch: #0b2f22;
+      --pitch-card: #14402e;
+      --chalk: #f4f1e8;
+      --chalk-dim: #c9d4c9;
+      --floodlight: #f2a91b;
+      --win: #4fb572;
+      --loss: #d95c4a;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--pitch);
+      color: var(--chalk);
+      font-family: 'Inter', Arial, sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+    .display { font-family: 'Oswald', sans-serif; }
+    a { color: inherit; }
+    .wrap { max-width: 900px; margin: 0 auto; padding: 0 20px; width: 100%; }
+
+    header.nav {
+      border-bottom: 1px solid rgba(255,255,255,0.1);
+      position: sticky; top: 0; background: rgba(11,47,34,0.95);
+      backdrop-filter: blur(6px); z-index: 20;
+    }
+    header.nav .wrap { height: 64px; display: flex; align-items: center; justify-content: space-between; }
+    .logo { font-size: 20px; font-weight: 600; letter-spacing: -0.3px; text-decoration: none; }
+    .logo span { color: var(--floodlight); }
+    nav.links { display: flex; align-items: center; gap: 18px; font-size: 14px; }
+    nav.links a { text-decoration: none; }
+    .link-dim { color: var(--chalk-dim); }
+    .btn {
+      display: inline-block; border: none; cursor: pointer;
+      font-family: 'Oswald', sans-serif; letter-spacing: 0.3px;
+      border-radius: 6px; padding: 10px 18px; font-size: 14px;
+      text-decoration: none; text-align: center;
+    }
+    .btn-primary { background: var(--floodlight); color: var(--pitch); }
+    .btn-primary:hover { filter: brightness(1.1); }
+    .btn-outline { background: transparent; border: 1px solid rgba(255,255,255,0.2); color: var(--chalk); }
+    .btn-outline:hover { background: rgba(255,255,255,0.05); }
+    .btn-chalk { background: var(--chalk); color: var(--pitch); }
+
+    footer.site-footer {
+      border-top: 1px solid rgba(255,255,255,0.1);
+      padding: 28px 0; text-align: center; font-size: 12px; color: var(--chalk-dim);
+    }
+  </style>
+<style>
+  main.vip { flex: 1; max-width: 700px; margin: 0 auto; padding: 50px 20px; width: 100%; }
+  .eyebrow { color: var(--floodlight); text-transform: uppercase; letter-spacing: 2px; font-size: 12px; margin-bottom: 8px; }
+  main.vip h1 { font-size: 32px; margin: 0 0 10px; }
+  main.vip > p { color: var(--chalk-dim); margin: 0 0 28px; }
+
+  .packages { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-bottom: 26px; }
+  @media (max-width: 640px) { .packages { grid-template-columns: 1fr; } }
+  .pkg {
+    text-align: left; border-radius: 10px; padding: 18px; cursor: pointer;
+    border: 1px solid rgba(255,255,255,0.1); background: var(--pitch-card);
+  }
+  .pkg.selected { border-color: var(--floodlight); background: rgba(242,169,27,0.1); }
+  .pkg .name { color: var(--chalk-dim); font-size: 14px; }
+  .pkg .price { font-family: 'Oswald', sans-serif; font-size: 22px; margin-top: 4px; }
+  .pkg .dur { color: var(--chalk-dim); font-size: 12px; margin-top: 4px; }
+
+  .modal-overlay {
+    display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.6);
+    align-items: center; justify-content: center; padding: 20px; z-index: 30;
+  }
+  .modal-overlay.open { display: flex; }
+  .modal { background: var(--pitch-card); border: 1px solid rgba(255,255,255,0.1); border-radius: 10px; padding: 24px; max-width: 380px; width: 100%; }
+  .modal h2 { font-size: 20px; margin: 0 0 8px; }
+  .modal p { color: var(--chalk-dim); font-size: 14px; margin: 0 0 18px; }
+</style>
+</head>
+<body>
+
+<header class="nav">
+  <div class="wrap">
+    <a href="index.html" class="logo">TIPS<span>HQ</span></a>
+    <nav class="links">
+      <a href="login.html" class="link-dim">Log in</a>
+      <a href="signup.html" class="btn btn-chalk" style="padding:8px 14px;">Sign up</a>
+    </nav>
+  </div>
+</header>
+
+<main class="vip">
+  <div class="eyebrow">VIP Access</div>
+  <h1 class="display">Pick your package</h1>
+  <p>Pay with MTN Mobile Money or Airtel Money. VIP unlocks instantly after payment is confirmed.</p>
+
+  <div class="packages" id="packages"></div>
+
+  <button class="btn btn-primary" id="pay-btn" style="padding:12px 24px;">Pay VIP</button>
+</main>
+
+<div class="modal-overlay" id="modal-overlay">
+  <div class="modal">
+    <h2 class="display">Payment</h2>
+    <p>MTN &amp; Airtel Mobile Money checkout isn't wired up yet — this is a placeholder for the demo. Real flow: enter number, confirm on phone, VIP unlocks on approval.</p>
+    <button class="btn btn-chalk" style="width:100%;" id="modal-close">Close</button>
+  </div>
+</div>
+
+  <script>
+    // ---- Shared data store (localStorage) ----
+    // Every page reads/writes the same keys so admin edits show up on
+    // the public site immediately. Swap this for real Supabase calls later.
+    const STORE_KEY = 'tipshq_data';
+
+    function seedStore() {
+      if (localStorage.getItem(STORE_KEY)) return;
+      const seed = {
+        tips: [
+          { id: 1, league: 'English Premier League', home_team: 'Arsenal', away_team: 'Chelsea', market: 'Over 2.5 Goals', odds: '1.85', confidence: 'High', kickoff_time: '2026-08-30T16:30', is_vip: false },
+          { id: 2, league: 'Uganda Premier League', home_team: 'KCCA FC', away_team: 'Vipers SC', market: 'Home Win', odds: '2.10', confidence: 'Medium', kickoff_time: '2026-08-29T13:00', is_vip: false },
+          { id: 3, league: 'La Liga', home_team: 'Real Madrid', away_team: 'Sevilla', market: 'Home Win & BTTS', odds: '2.60', confidence: 'High', kickoff_time: '2026-08-30T19:00', is_vip: true },
+          { id: 4, league: 'Serie A', home_team: 'Inter Milan', away_team: 'Roma', market: 'Under 3.5 Goals', odds: '1.45', confidence: 'High', kickoff_time: '2026-08-30T18:00', is_vip: true }
+        ],
+        packages: [
+          { id: 1, name: 'Daily VIP', price_ugx: 5000, duration_days: 1 },
+          { id: 2, name: 'Weekly VIP', price_ugx: 25000, duration_days: 7 },
+          { id: 3, name: 'Monthly VIP', price_ugx: 80000, duration_days: 30 }
+        ],
+        announcements: [
+          { id: 1, title: 'Weekend accumulator dropping Saturday', message: 'VIP members should check the tips page from 9am Saturday for the weekend accumulator.' }
+        ],
+        ads: [
+          { id: 1, title: 'Bet responsibly', link_url: '#', active: true }
+        ],
+        users: []
+      };
+      localStorage.setItem(STORE_KEY, JSON.stringify(seed));
+    }
+
+    function getStore() {
+      seedStore();
+      return JSON.parse(localStorage.getItem(STORE_KEY));
+    }
+
+    function saveStore(data) {
+      localStorage.setItem(STORE_KEY, JSON.stringify(data));
+    }
+
+    function fmtUGX(n) {
+      return 'UGX ' + Number(n).toLocaleString('en-UG');
+    }
+
+    function fmtKickoff(iso) {
+      const d = new Date(iso);
+      if (isNaN(d)) return iso;
+      return d.toLocaleString('en-UG', { weekday: 'short', hour: '2-digit', minute: '2-digit' });
+    }
+  </script>
+<script>
+  const data = getStore();
+  let selectedId = data.packages[1] ? data.packages[1].id : (data.packages[0] && data.packages[0].id);
+
+  function render() {
+    document.getElementById('packages').innerHTML = data.packages.map(p =>
+      '<div class="pkg' + (p.id === selectedId ? ' selected' : '') + '" data-id="' + p.id + '">' +
+        '<div class="name">' + p.name + '</div>' +
+        '<div class="price display">' + fmtUGX(p.price_ugx) + '</div>' +
+        '<div class="dur">' + p.duration_days + ' day' + (p.duration_days > 1 ? 's' : '') + ' access</div>' +
+      '</div>'
+    ).join('');
+
+    document.querySelectorAll('.pkg').forEach(el => {
+      el.addEventListener('click', () => {
+        selectedId = Number(el.dataset.id);
+        render();
+      });
+    });
+  }
+  render();
+
+  document.getElementById('pay-btn').addEventListener('click', () => {
+    document.getElementById('modal-overlay').classList.add('open');
+  });
+  document.getElementById('modal-close').addEventListener('click', () => {
+    document.getElementById('modal-overlay').classList.remove('open');
+  });
+</script>
+</body>
+</html>
