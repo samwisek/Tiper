@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Admin | TipsHQ</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --pitch: #0b2f22; --pitch-card: #14402e; --chalk: #f4f1e8;
+    --chalk-dim: #c9d4c9; --floodlight: #f2a91b; --win: #4fb572; --loss: #d95c4a;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--pitch); color: var(--chalk); font-family: 'Inter', Arial, sans-serif; min-height: 100vh; }
+  .display { font-family: 'Oswald', sans-serif; }
+  .wrap { max-width: 900px; margin: 0 auto; padding: 0 20px; }
+
+  header.nav {
+    border-bottom: 1px solid rgba(255,255,255,0.1); height: 64px;
+    display: flex; align-items: center; justify-content: space-between; padding: 0 20px;
+  }
+  header.nav .logo { font-size: 20px; font-weight: 600; }
+  header.nav .logo span { color: var(--floodlight); }
+  header.nav .tag { color: var(--chalk-dim); font-size: 13px; font-family: 'Inter', sans-serif; margin-left: 6px; }
+  header.nav a.view-site { color: var(--chalk-dim); font-size: 14px; text-decoration: none; }
+
+  .tabs { display: flex; gap: 4px; border-bottom: 1px solid rgba(255,255,255,0.1); margin: 28px 20px 26px; overflow-x: auto; }
+  .tab-btn {
+    background: none; border: none; color: var(--chalk-dim); font-size: 14px; font-weight: 500;
+    padding: 10px 16px; cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px;
+    white-space: nowrap; font-family: 'Inter', sans-serif;
+  }
+  .tab-btn.active { color: var(--chalk); border-bottom-color: var(--floodlight); }
+
+  .panel { display: none; padding: 0 20px 60px; max-width: 900px; margin: 0 auto; }
+  .panel.active { display: grid; grid-template-columns: 1fr 1.3fr; gap: 24px; }
+  @media (max-width: 800px) { .panel.active { grid-template-columns: 1fr; } }
+
+  .card { background: var(--pitch-card); border: 1px solid rgba(255,255,255,0.1); border-radius: 10px; padding: 18px; }
+  .card h2 { font-size: 17px; margin: 0 0 16px; }
+  .card p.hint { color: var(--chalk-dim); font-size: 13px; margin: 8px 0 0; }
+
+  input, select, textarea {
+    width: 100%; background: var(--pitch); border: 1px solid rgba(255,255,255,0.15);
+    border-radius: 6px; padding: 9px 11px; color: var(--chalk); font-size: 14px;
+    outline: none; font-family: 'Inter', sans-serif; margin-bottom: 10px;
+  }
+  input:focus, select:focus, textarea:focus { border-color: var(--floodlight); }
+  .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  label.check { display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--chalk-dim); margin-bottom: 12px; }
+  label.check input { width: auto; margin: 0; }
+
+  .btn-add {
+    background: var(--floodlight); color: var(--pitch); border: none; font-weight: 600;
+    font-size: 14px; padding: 9px 16px; border-radius: 6px; cursor: pointer; font-family: 'Inter', sans-serif;
+  }
+
+  .list { display: flex; flex-direction: column; gap: 10px; }
+  .item {
+    background: var(--pitch-card); border: 1px solid rgba(255,255,255,0.1); border-radius: 10px;
+    padding: 14px; display: flex; justify-content: space-between; gap: 10px; align-items: flex-start;
+  }
+  .item .meta { color: var(--chalk-dim); font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .item .meta .vip-tag { color: var(--floodlight); margin-left: 8px; }
+  .item .title { font-family: 'Oswald', sans-serif; font-size: 16px; margin-top: 2px; }
+  .item .sub { color: var(--chalk-dim); font-size: 13px; margin-top: 2px; }
+  .item .actions { display: flex; gap: 12px; flex-shrink: 0; }
+  .item .actions button { background: none; border: none; cursor: pointer; font-size: 13px; font-family: 'Inter', sans-serif; }
+  .action-remove { color: var(--loss); }
+  .action-toggle { color: var(--floodlight); }
+  .empty { color: var(--chalk-dim); font-size: 14px; }
+</style>
+</head>
+<body>
+
+<header class="nav">
+  <div>
+    <span class="logo display">TIPS<span>HQ</span></span>
+    <span class="tag">Admin</span>
+  </div>
+  <a href="index.html" class="view-site">View site &rarr;</a>
+</header>
+
+<div class="tabs" id="tabs">
+  <button class="tab-btn active" data-tab="tips">Tips</button>
+  <button class="tab-btn" data-tab="packages">Packages</button>
+  <button class="tab-btn" data-tab="announcements">Announcements</button>
+  <button class="tab-btn" data-tab="ads">Adverts</button>
+  <button class="tab-btn" data-tab="payments">Payments</button>
+</div>
+
+<!-- Tips -->
+<section class="panel active" id="panel-tips">
+  <div class="card">
+    <h2 class="display">Post a tip</h2>
+    <form id="tip-form">
+      <input type="text" id="t-league" placeholder="League (e.g. EPL)">
+      <div class="row2">
+        <input type="text" id="t-home" placeholder="Home team" required>
+        <input type="text" id="t-away" placeholder="Away team" required>
+      </div>
+      <input type="text" id="t-market" placeholder="Market / pick (e.g. Over 2.5)">
+      <div class="row2">
+        <input type="text" id="t-odds" placeholder="Odds">
+        <select id="t-confidence">
+          <option>High</option>
+          <option selected>Medium</option>
+          <option>Low</option>
+        </select>
+      </div>
+      <input type="datetime-local" id="t-kickoff">
+      <label class="check"><input type="checkbox" id="t-vip"> VIP only</label>
+      <button type="submit" class="btn-add">Post tip</button>
+    </form>
+  </div>
+  <div class="list" id="tips-list"></div>
+</section>
+
+<!-- Packages -->
+<section class="panel" id="panel-packages">
+  <div class="card">
+    <h2 class="display">Add VIP package</h2>
+    <form id="pkg-form">
+      <input type="text" id="p-name" placeholder="Package name (e.g. Weekly VIP)" required>
+      <input type="number" id="p-price" placeholder="Price (UGX)" required>
+      <input type="number" id="p-duration" placeholder="Duration (days)" required>
+      <button type="submit" class="btn-add">Add package</button>
+    </form>
+  </div>
+  <div class="list" id="packages-list"></div>
+</section>
+
+<!-- Announcements -->
+<section class="panel" id="panel-announcements">
+  <div class="card">
+    <h2 class="display">Post announcement</h2>
+    <form id="ann-form">
+      <input type="text" id="a-title" placeholder="Title (optional)">
+      <textarea id="a-message" rows="4" placeholder="Message" required></textarea>
+      <button type="submit" class="btn-add">Post</button>
+    </form>
+  </div>
+  <div class="list" id="announcements-list"></div>
+</section>
+
+<!-- Ads -->
+<section class="panel" id="panel-ads">
+  <div class="card">
+    <h2 class="display">Add advert</h2>
+    <form id="ad-form">
+      <input type="text" id="ad-title" placeholder="Advert title" required>
+      <input type="text" id="ad-link" placeholder="Link URL">
+      <p class="hint">Image upload will connect once Supabase storage is wired in.</p>
+      <button type="submit" class="btn-add">Add advert</button>
+    </form>
+  </div>
+  <div class="list" id="ads-list"></div>
+</section>
+
+<!-- Payments -->
+<section class="panel" id="panel-payments">
+  <div class="card" style="grid-column: 1 / -1;">
+    <h2 class="display">VIP Payments</h2>
+    <p class="hint" style="margin-top:0;">Not connected yet. Once wired up, MTN and Airtel Mobile Money submissions will land here for you to approve or reject — approving activates the user's VIP package automatically.</p>
+  </div>
+</section>
+
+  <script>
+    // ---- Shared data store (localStorage) ----
+    // Every page reads/writes the same keys so admin edits show up on
+    // the public site immediately. Swap this for real Supabase calls later.
+    const STORE_KEY = 'tipshq_data';
+
+    function seedStore() {
+      if (localStorage.getItem(STORE_KEY)) return;
+      const seed = {
+        tips: [
+          { id: 1, league: 'English Premier League', home_team: 'Arsenal', away_team: 'Chelsea', market: 'Over 2.5 Goals', odds: '1.85', confidence: 'High', kickoff_time: '2026-08-30T16:30', is_vip: false },
+          { id: 2, league: 'Uganda Premier League', home_team: 'KCCA FC', away_team: 'Vipers SC', market: 'Home Win', odds: '2.10', confidence: 'Medium', kickoff_time: '2026-08-29T13:00', is_vip: false },
+          { id: 3, league: 'La Liga', home_team: 'Real Madrid', away_team: 'Sevilla', market: 'Home Win & BTTS', odds: '2.60', confidence: 'High', kickoff_time: '2026-08-30T19:00', is_vip: true },
+          { id: 4, league: 'Serie A', home_team: 'Inter Milan', away_team: 'Roma', market: 'Under 3.5 Goals', odds: '1.45', confidence: 'High', kickoff_time: '2026-08-30T18:00', is_vip: true }
+        ],
+        packages: [
+          { id: 1, name: 'Daily VIP', price_ugx: 5000, duration_days: 1 },
+          { id: 2, name: 'Weekly VIP', price_ugx: 25000, duration_days: 7 },
+          { id: 3, name: 'Monthly VIP', price_ugx: 80000, duration_days: 30 }
+        ],
+        announcements: [
+          { id: 1, title: 'Weekend accumulator dropping Saturday', message: 'VIP members should check the tips page from 9am Saturday for the weekend accumulator.' }
+        ],
+        ads: [
+          { id: 1, title: 'Bet responsibly', link_url: '#', active: true }
+        ],
+        users: []
+      };
+      localStorage.setItem(STORE_KEY, JSON.stringify(seed));
+    }
+
+    function getStore() {
+      seedStore();
+      return JSON.parse(localStorage.getItem(STORE_KEY));
+    }
+
+    function saveStore(data) {
+      localStorage.setItem(STORE_KEY, JSON.stringify(data));
+    }
+
+    function fmtUGX(n) {
+      return 'UGX ' + Number(n).toLocaleString('en-UG');
+    }
+
+    function fmtKickoff(iso) {
+      const d = new Date(iso);
+      if (isNaN(d)) return iso;
+      return d.toLocaleString('en-UG', { weekday: 'short', hour: '2-digit', minute: '2-digit' });
+    }
+  </script>
+<script>
+  const data = getStore();
+
+  // ---- Tabs ----
+  document.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+      btn.classList.add('active');
+      document.getElementById('panel-' + btn.dataset.tab).classList.add('active');
+    });
+  });
+
+  // ---- Tips ----
+  function renderTips() {
+    const list = document.getElementById('tips-list');
+    list.innerHTML = data.tips.map(t =>
+      '<div class="item">' +
+        '<div>' +
+          '<div class="meta">' + (t.league || '—') + (t.is_vip ? '<span class="vip-tag">VIP</span>' : '') + '</div>' +
+          '<div class="title">' + t.home_team + ' vs ' + t.away_team + '</div>' +
+          '<div class="sub">' + (t.market || '') + (t.odds ? ' @ ' + t.odds : '') + '</div>' +
+        '</div>' +
+        '<div class="actions"><button class="action-remove" onclick="removeTip(' + t.id + ')">Remove</button></div>' +
+      '</div>'
+    ).join('') || '<p class="empty">No tips yet.</p>';
+  }
+  function removeTip(id) {
+    data.tips = data.tips.filter(t => t.id !== id);
+    saveStore(data);
+    renderTips();
+  }
+  document.getElementById('tip-form').addEventListener('submit', function (e) {
+    e.preventDefault();
+    data.tips.unshift({
+      id: Date.now(),
+      league: document.getElementById('t-league').value,
+      home_team: document.getElementById('t-home').value,
+      away_team: document.getElementById('t-away').value,
+      market: document.getElementById('t-market').value,
+      odds: document.getElementById('t-odds').value,
+      confidence: document.getElementById('t-confidence').value,
+      kickoff_time: document.getElementById('t-kickoff').value,
+      is_vip: document.getElementById('t-vip').checked
+    });
+    saveStore(data);
+    this.reset();
+    renderTips();
+  });
+  renderTips();
+
+  // ---- Packages ----
+  function renderPackages() {
+    const list = document.getElementById('packages-list');
+    list.innerHTML = data.packages.map(p =>
+      '<div class="item">' +
+        '<div>' +
+          '<div class="title">' + p.name + '</div>' +
+          '<div class="sub">' + fmtUGX(p.price_ugx) + ' &middot; ' + p.duration_days + ' day' + (p.duration_days > 1 ? 's' : '') + '</div>' +
+        '</div>' +
+        '<div class="actions"><button class="action-remove" onclick="removePackage(' + p.id + ')">Remove</button></div>' +
+      '</div>'
+    ).join('') || '<p class="empty">No packages yet.</p>';
+  }
+  function removePackage(id) {
+    data.packages = data.packages.filter(p => p.id !== id);
+    saveStore(data);
+    renderPackages();
+  }
+  document.getElementById('pkg-form').addEventListener('submit', function (e) {
+    e.preventDefault();
+    data.packages.push({
+      id: Date.now(),
+      name: document.getElementById('p-name').value,
+      price_ugx: Number(document.getElementById('p-price').value),
+      duration_days: Number(document.getElementById('p-duration').value) || 1
+    });
+    saveStore(data);
+    this.reset();
+    renderPackages();
+  });
+  renderPackages();
+
+  // ---- Announcements ----
+  function renderAnnouncements() {
+    const list = document.getElementById('announcements-list');
+    list.innerHTML = data.announcements.map(a =>
+      '<div class="item">' +
+        '<div>' +
+          (a.title ? '<div class="title">' + a.title + '</div>' : '') +
+          '<div class="sub">' + a.message + '</div>' +
+        '</div>' +
+        '<div class="actions"><button class="action-remove" onclick="removeAnnouncement(' + a.id + ')">Remove</button></div>' +
+      '</div>'
+    ).join('') || '<p class="empty">No announcements yet.</p>';
+  }
+  function removeAnnouncement(id) {
+    data.announcements = data.announcements.filter(a => a.id !== id);
+    saveStore(data);
+    renderAnnouncements();
+  }
+  document.getElementById('ann-form').addEventListener('submit', function (e) {
+    e.preventDefault();
+    data.announcements.unshift({
+      id: Date.now(),
+      title: document.getElementById('a-title').value,
+      message: document.getElementById('a-message').value
+    });
+    saveStore(data);
+    this.reset();
+    renderAnnouncements();
+  });
+  renderAnnouncements();
+
+  // ---- Ads ----
+  function renderAds() {
+    const list = document.getElementById('ads-list');
+    list.innerHTML = data.ads.map(a =>
+      '<div class="item">' +
+        '<div>' +
+          '<div class="title">' + a.title + '</div>' +
+          '<div class="sub">' + (a.active ? 'Active' : 'Paused') + '</div>' +
+        '</div>' +
+        '<div class="actions">' +
+          '<button class="action-toggle" onclick="toggleAd(' + a.id + ')">' + (a.active ? 'Pause' : 'Activate') + '</button>' +
+          '<button class="action-remove" onclick="removeAd(' + a.id + ')">Remove</button>' +
+        '</div>' +
+      '</div>'
+    ).join('') || '<p class="empty">No adverts yet.</p>';
+  }
+  function toggleAd(id) {
+    data.ads = data.ads.map(a => a.id === id ? { ...a, active: !a.active } : a);
+    saveStore(data);
+    renderAds();
+  }
+  function removeAd(id) {
+    data.ads = data.ads.filter(a => a.id !== id);
+    saveStore(data);
+    renderAds();
+  }
+  document.getElementById('ad-form').addEventListener('submit', function (e) {
+    e.preventDefault();
+    data.ads.push({
+      id: Date.now(),
+      title: document.getElementById('ad-title').value,
+      link_url: document.getElementById('ad-link').value,
+      active: true
+    });
+    saveStore(data);
+    this.reset();
+    renderAds();
+  });
+  renderAds();
+</script>
+</body>
+</html>
