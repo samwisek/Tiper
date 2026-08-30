@@ -117,7 +117,7 @@
 <header class="nav">
   <div class="wrap">
     <a href="index.html" class="logo">TIPS<span>HQ</span></a>
-    <nav class="links">
+    <nav class="links" id="auth-links">
       <a href="vip.html" style="color:var(--floodlight); font-weight:500;">Go VIP</a>
       <a href="login.html" class="link-dim">Log in</a>
       <a href="signup.html" class="btn btn-chalk" style="padding:8px 14px;">Sign up</a>
@@ -165,96 +165,144 @@
   18+ Bet responsibly. TipsHQ tips are informational, not guarantees.
 </footer>
 
-  <script>
-    // ---- Shared data store (localStorage) ----
-    // Every page reads/writes the same keys so admin edits show up on
-    // the public site immediately. Swap this for real Supabase calls later.
-    const STORE_KEY = 'tipshq_data';
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+    import {
+      getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword,
+      onAuthStateChanged, signOut
+    } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+    import {
+      getFirestore, doc, getDoc, setDoc, updateDoc, deleteDoc, addDoc,
+      collection, getDocs, query, orderBy, where, serverTimestamp, Timestamp
+    } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
-    function seedStore() {
-      if (localStorage.getItem(STORE_KEY)) return;
-      const seed = {
-        tips: [
-          { id: 1, league: 'English Premier League', home_team: 'Arsenal', away_team: 'Chelsea', market: 'Over 2.5 Goals', odds: '1.85', confidence: 'High', kickoff_time: '2026-08-30T16:30', is_vip: false },
-          { id: 2, league: 'Uganda Premier League', home_team: 'KCCA FC', away_team: 'Vipers SC', market: 'Home Win', odds: '2.10', confidence: 'Medium', kickoff_time: '2026-08-29T13:00', is_vip: false },
-          { id: 3, league: 'La Liga', home_team: 'Real Madrid', away_team: 'Sevilla', market: 'Home Win & BTTS', odds: '2.60', confidence: 'High', kickoff_time: '2026-08-30T19:00', is_vip: true },
-          { id: 4, league: 'Serie A', home_team: 'Inter Milan', away_team: 'Roma', market: 'Under 3.5 Goals', odds: '1.45', confidence: 'High', kickoff_time: '2026-08-30T18:00', is_vip: true }
-        ],
-        packages: [
-          { id: 1, name: 'Daily VIP', price_ugx: 5000, duration_days: 1 },
-          { id: 2, name: 'Weekly VIP', price_ugx: 25000, duration_days: 7 },
-          { id: 3, name: 'Monthly VIP', price_ugx: 80000, duration_days: 30 }
-        ],
-        announcements: [
-          { id: 1, title: 'Weekend accumulator dropping Saturday', message: 'VIP members should check the tips page from 9am Saturday for the weekend accumulator.' }
-        ],
-        ads: [
-          { id: 1, title: 'Bet responsibly', link_url: '#', active: true }
-        ],
-        users: []
-      };
-      localStorage.setItem(STORE_KEY, JSON.stringify(seed));
-    }
+    // ---- Paste your Firebase config here ----
+    // Firebase console → Project settings → General → Your apps → SDK setup and config
+    const firebaseConfig = {
+      apiKey: "YOUR_API_KEY",
+      authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
+      projectId: "YOUR_PROJECT_ID",
+      storageBucket: "YOUR_PROJECT_ID.appspot.com",
+      messagingSenderId: "YOUR_SENDER_ID",
+      appId: "YOUR_APP_ID"
+    };
 
-    function getStore() {
-      seedStore();
-      return JSON.parse(localStorage.getItem(STORE_KEY));
-    }
+    const app = initializeApp(firebaseConfig);
+    window.auth = getAuth(app);
+    window.db = getFirestore(app);
+    window.fb = {
+      doc, getDoc, setDoc, updateDoc, deleteDoc, addDoc,
+      collection, getDocs, query, orderBy, where, serverTimestamp, Timestamp,
+      createUserWithEmailAndPassword, signInWithEmailAndPassword, onAuthStateChanged, signOut
+    };
 
-    function saveStore(data) {
-      localStorage.setItem(STORE_KEY, JSON.stringify(data));
-    }
-
-    function fmtUGX(n) {
+    // Turns "0771234567" or "+256771234567" into "256771234567"
+    window.normalizePhone = function (raw) {
+      let p = raw.replace(/[^0-9]/g, '');
+      if (p.startsWith('0')) p = '256' + p.slice(1);
+      if (p.startsWith('256256')) p = p.slice(3);
+      return p;
+    };
+    window.phoneToEmail = function (raw) {
+      return window.normalizePhone(raw) + '@tipshq.local';
+    };
+    window.fmtUGX = function (n) {
       return 'UGX ' + Number(n).toLocaleString('en-UG');
-    }
-
-    function fmtKickoff(iso) {
+    };
+    window.fmtKickoff = function (iso) {
+      if (!iso) return '';
       const d = new Date(iso);
       if (isNaN(d)) return iso;
       return d.toLocaleString('en-UG', { weekday: 'short', hour: '2-digit', minute: '2-digit' });
-    }
+    };
+
+    // Resolves once with the current user (or null) so pages don't have
+    // to guess when auth state is ready.
+    window.authReady = new Promise((resolve) => {
+      window.fb.onAuthStateChanged(window.auth, (user) => resolve(user));
+    });
   </script>
-<script>
-  const data = getStore();
-
-  // Announcements
-  const annBox = document.getElementById('announcements');
-  data.announcements.forEach(a => {
-    const div = document.createElement('div');
-    div.className = 'announcement';
-    div.innerHTML = '<b>Announcement</b><span>' + a.message + '</span>';
-    annBox.appendChild(div);
-  });
-
+<script type="module">
   function ticketHTML(t) {
     const confClass = t.confidence === 'High' ? 'conf-high' : t.confidence === 'Medium' ? 'conf-medium' : 'conf-low';
-    const pickOrLock = t.is_vip
+    const locked = t.isVip && t.market === undefined;
+    const pickOrLock = locked
       ? '<div class="locked-note">🔒 VIP tip &mdash; unlock to view pick &amp; odds</div>'
-      : '<div class="ticket-pick"><span><span class="label">Pick:</span> ' + t.market + '</span><span class="' + confClass + '">' + t.confidence + ' confidence</span></div>';
-    const oddsBox = t.is_vip
+      : '<div class="ticket-pick"><span><span class="label">Pick:</span> ' + (t.market || '') + '</span><span class="' + confClass + '">' + (t.confidence || '') + ' confidence</span></div>';
+    const oddsBox = locked
       ? '<div class="ticket-odds">🔒</div>'
-      : '<div class="ticket-odds"><span class="lab">Odds</span><span class="val">' + t.odds + '</span></div>';
+      : '<div class="ticket-odds"><span class="lab">Odds</span><span class="val">' + (t.odds || '—') + '</span></div>';
 
     return '<div class="ticket">' +
       '<div class="ticket-body">' +
-        '<div class="ticket-meta"><span>' + (t.league || '') + '</span><span>' + fmtKickoff(t.kickoff_time) + '</span></div>' +
-        '<div class="ticket-match display">' + t.home_team + ' <span class="vs">vs</span> ' + t.away_team + '</div>' +
+        '<div class="ticket-meta"><span>' + (t.league || '') + '</span><span>' + fmtKickoff(t.kickoffTime) + '</span></div>' +
+        '<div class="ticket-match display">' + t.homeTeam + ' <span class="vs">vs</span> ' + t.awayTeam + '</div>' +
         pickOrLock +
       '</div>' +
       oddsBox +
     '</div>';
   }
 
-  const freeTips = data.tips.filter(t => !t.is_vip);
-  const vipTips = data.tips.filter(t => t.is_vip);
+  async function loadPage() {
+    const user = await authReady;
 
-  document.getElementById('free-count').textContent = freeTips.length + ' match' + (freeTips.length !== 1 ? 'es' : '');
-  document.getElementById('free-tips-list').innerHTML = freeTips.map(ticketHTML).join('') || '<p style="color:var(--chalk-dim)">No free tips posted yet.</p>';
-  document.getElementById('vip-tips-list').innerHTML = vipTips.map(ticketHTML).join('') || '<p style="color:var(--chalk-dim)">No VIP tips posted yet.</p>';
+    // Auth state in nav
+    if (user) {
+      document.getElementById('auth-links').innerHTML =
+        '<a href="vip.html" style="color:var(--floodlight); font-weight:500;">Go VIP</a>' +
+        '<a href="#" id="logout-link" class="link-dim">Log out</a>';
+      document.getElementById('logout-link').addEventListener('click', async (e) => {
+        e.preventDefault();
+        await fb.signOut(auth);
+        location.reload();
+      });
+    }
 
-  const activeAd = data.ads.find(a => a.active);
-  document.getElementById('ad-slot').textContent = activeAd ? 'Advert space — ' + activeAd.title : '';
+    // Announcements
+    const annSnap = await fb.getDocs(fb.query(fb.collection(db, 'announcements'), fb.orderBy('createdAt', 'desc')));
+    const annBox = document.getElementById('announcements');
+    annSnap.forEach(d => {
+      const a = d.data();
+      const div = document.createElement('div');
+      div.className = 'announcement';
+      div.innerHTML = '<b>Announcement</b><span>' + a.message + '</span>';
+      annBox.appendChild(div);
+    });
+
+    // Tips — public fields first, then try each tip's secure/pick doc.
+    // Firestore rules deny that read for locked VIP tips; we treat the
+    // denial as "locked" rather than an error.
+    const tipsSnap = await fb.getDocs(fb.query(fb.collection(db, 'tips'), fb.orderBy('kickoffTime', 'desc')));
+    const tips = [];
+    for (const d of tipsSnap.docs) {
+      const t = { id: d.id, ...d.data() };
+      try {
+        const pickSnap = await fb.getDoc(fb.doc(db, 'tips', d.id, 'secure', 'pick'));
+        if (pickSnap.exists()) {
+          const p = pickSnap.data();
+          t.market = p.market;
+          t.odds = p.odds;
+        }
+      } catch (e) {
+        // permission denied — leave market/odds undefined => shown as locked
+      }
+      tips.push(t);
+    }
+
+    const freeTips = tips.filter(t => !t.isVip);
+    const vipTips = tips.filter(t => t.isVip);
+    document.getElementById('free-count').textContent = freeTips.length + ' match' + (freeTips.length !== 1 ? 'es' : '');
+    document.getElementById('free-tips-list').innerHTML = freeTips.map(ticketHTML).join('') || '<p style="color:var(--chalk-dim)">No free tips posted yet.</p>';
+    document.getElementById('vip-tips-list').innerHTML = vipTips.map(ticketHTML).join('') || '<p style="color:var(--chalk-dim)">No VIP tips posted yet.</p>';
+
+    // Ads
+    const adsSnap = await fb.getDocs(fb.query(fb.collection(db, 'ads'), fb.where('active', '==', true)));
+    let firstAd = null;
+    adsSnap.forEach(d => { if (!firstAd) firstAd = d.data(); });
+    document.getElementById('ad-slot').textContent = firstAd ? 'Advert space — ' + firstAd.title : '';
+  }
+
+  loadPage();
 </script>
 </body>
 </html>
