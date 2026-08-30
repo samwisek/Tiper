@@ -70,6 +70,8 @@
   .action-remove { color: var(--loss); }
   .action-toggle { color: var(--floodlight); }
   .empty { color: var(--chalk-dim); font-size: 14px; }
+  .gate { max-width: 420px; margin: 80px auto; text-align: center; padding: 0 20px; }
+  .gate p { color: var(--chalk-dim); font-size: 15px; margin: 10px 0 22px; }
 </style>
 </head>
 <body>
@@ -81,6 +83,14 @@
   </div>
   <a href="index.html" class="view-site">View site &rarr;</a>
 </header>
+
+<div class="gate" id="gate" style="display:none;">
+  <h1 class="display" style="font-size:22px;">Admin sign-in required</h1>
+  <p id="gate-message">Checking your session&hellip;</p>
+  <a href="login.html?next=admin.html" class="btn btn-add" style="display:inline-block; text-decoration:none; background:var(--floodlight); color:var(--pitch); padding:10px 20px; border-radius:6px; font-weight:600;">Log in</a>
+</div>
+
+<div id="admin-content" style="display:none;">
 
 <div class="tabs" id="tabs">
   <button class="tab-btn active" data-tab="tips">Tips</button>
@@ -162,62 +172,99 @@
 <section class="panel" id="panel-payments">
   <div class="card" style="grid-column: 1 / -1;">
     <h2 class="display">VIP Payments</h2>
-    <p class="hint" style="margin-top:0;">Not connected yet. Once wired up, MTN and Airtel Mobile Money submissions will land here for you to approve or reject — approving activates the user's VIP package automatically.</p>
+    <p class="hint" style="margin-top:0;">Approve a payment to activate that user's VIP for the package's full duration, starting now.</p>
+    <div class="list" id="payments-list" style="margin-top:16px;"></div>
   </div>
 </section>
 
-  <script>
-    // ---- Shared data store (localStorage) ----
-    // Every page reads/writes the same keys so admin edits show up on
-    // the public site immediately. Swap this for real Supabase calls later.
-    const STORE_KEY = 'tipshq_data';
+</div><!-- /admin-content -->
 
-    function seedStore() {
-      if (localStorage.getItem(STORE_KEY)) return;
-      const seed = {
-        tips: [
-          { id: 1, league: 'English Premier League', home_team: 'Arsenal', away_team: 'Chelsea', market: 'Over 2.5 Goals', odds: '1.85', confidence: 'High', kickoff_time: '2026-08-30T16:30', is_vip: false },
-          { id: 2, league: 'Uganda Premier League', home_team: 'KCCA FC', away_team: 'Vipers SC', market: 'Home Win', odds: '2.10', confidence: 'Medium', kickoff_time: '2026-08-29T13:00', is_vip: false },
-          { id: 3, league: 'La Liga', home_team: 'Real Madrid', away_team: 'Sevilla', market: 'Home Win & BTTS', odds: '2.60', confidence: 'High', kickoff_time: '2026-08-30T19:00', is_vip: true },
-          { id: 4, league: 'Serie A', home_team: 'Inter Milan', away_team: 'Roma', market: 'Under 3.5 Goals', odds: '1.45', confidence: 'High', kickoff_time: '2026-08-30T18:00', is_vip: true }
-        ],
-        packages: [
-          { id: 1, name: 'Daily VIP', price_ugx: 5000, duration_days: 1 },
-          { id: 2, name: 'Weekly VIP', price_ugx: 25000, duration_days: 7 },
-          { id: 3, name: 'Monthly VIP', price_ugx: 80000, duration_days: 30 }
-        ],
-        announcements: [
-          { id: 1, title: 'Weekend accumulator dropping Saturday', message: 'VIP members should check the tips page from 9am Saturday for the weekend accumulator.' }
-        ],
-        ads: [
-          { id: 1, title: 'Bet responsibly', link_url: '#', active: true }
-        ],
-        users: []
-      };
-      localStorage.setItem(STORE_KEY, JSON.stringify(seed));
-    }
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+    import {
+      getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword,
+      onAuthStateChanged, signOut
+    } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+    import {
+      getFirestore, doc, getDoc, setDoc, updateDoc, deleteDoc, addDoc,
+      collection, getDocs, query, orderBy, where, serverTimestamp, Timestamp
+    } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
-    function getStore() {
-      seedStore();
-      return JSON.parse(localStorage.getItem(STORE_KEY));
-    }
+    // ---- Paste your Firebase config here ----
+    // Firebase console → Project settings → General → Your apps → SDK setup and config
+    const firebaseConfig = {
+      apiKey: "YOUR_API_KEY",
+      authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
+      projectId: "YOUR_PROJECT_ID",
+      storageBucket: "YOUR_PROJECT_ID.appspot.com",
+      messagingSenderId: "YOUR_SENDER_ID",
+      appId: "YOUR_APP_ID"
+    };
 
-    function saveStore(data) {
-      localStorage.setItem(STORE_KEY, JSON.stringify(data));
-    }
+    const app = initializeApp(firebaseConfig);
+    window.auth = getAuth(app);
+    window.db = getFirestore(app);
+    window.fb = {
+      doc, getDoc, setDoc, updateDoc, deleteDoc, addDoc,
+      collection, getDocs, query, orderBy, where, serverTimestamp, Timestamp,
+      createUserWithEmailAndPassword, signInWithEmailAndPassword, onAuthStateChanged, signOut
+    };
 
-    function fmtUGX(n) {
+    // Turns "0771234567" or "+256771234567" into "256771234567"
+    window.normalizePhone = function (raw) {
+      let p = raw.replace(/[^0-9]/g, '');
+      if (p.startsWith('0')) p = '256' + p.slice(1);
+      if (p.startsWith('256256')) p = p.slice(3);
+      return p;
+    };
+    window.phoneToEmail = function (raw) {
+      return window.normalizePhone(raw) + '@tipshq.local';
+    };
+    window.fmtUGX = function (n) {
       return 'UGX ' + Number(n).toLocaleString('en-UG');
-    }
-
-    function fmtKickoff(iso) {
+    };
+    window.fmtKickoff = function (iso) {
+      if (!iso) return '';
       const d = new Date(iso);
       if (isNaN(d)) return iso;
       return d.toLocaleString('en-UG', { weekday: 'short', hour: '2-digit', minute: '2-digit' });
-    }
+    };
+
+    // Resolves once with the current user (or null) so pages don't have
+    // to guess when auth state is ready.
+    window.authReady = new Promise((resolve) => {
+      window.fb.onAuthStateChanged(window.auth, (user) => resolve(user));
+    });
   </script>
-<script>
-  const data = getStore();
+<script type="module">
+  let isAdmin = false;
+
+  async function checkAdmin() {
+    const user = await authReady;
+    const gate = document.getElementById('gate');
+    const gateMsg = document.getElementById('gate-message');
+    const content = document.getElementById('admin-content');
+
+    if (!user) {
+      gate.style.display = 'block';
+      gateMsg.textContent = "You're not logged in.";
+      return false;
+    }
+
+    const profSnap = await fb.getDoc(fb.doc(db, 'profiles', user.uid));
+    const profile = profSnap.exists() ? profSnap.data() : null;
+
+    if (!profile || !profile.isAdmin) {
+      gate.style.display = 'block';
+      gateMsg.textContent = "This account isn't an admin. Ask the site owner to flag your profile as admin in Firebase.";
+      return false;
+    }
+
+    isAdmin = true;
+    gate.style.display = 'none';
+    content.style.display = 'block';
+    return true;
+  }
 
   // ---- Tabs ----
   document.querySelectorAll('.tab-btn').forEach(btn => {
@@ -230,145 +277,237 @@
   });
 
   // ---- Tips ----
-  function renderTips() {
+  async function renderTips() {
+    const snap = await fb.getDocs(fb.query(fb.collection(db, 'tips'), fb.orderBy('createdAt', 'desc')));
+    const tips = [];
+    for (const d of snap.docs) {
+      const t = { id: d.id, ...d.data() };
+      const pickSnap = await fb.getDoc(fb.doc(db, 'tips', d.id, 'secure', 'pick'));
+      if (pickSnap.exists()) {
+        const p = pickSnap.data();
+        t.market = p.market;
+        t.odds = p.odds;
+      }
+      tips.push(t);
+    }
+
     const list = document.getElementById('tips-list');
-    list.innerHTML = data.tips.map(t =>
+    list.innerHTML = tips.map(t =>
       '<div class="item">' +
         '<div>' +
-          '<div class="meta">' + (t.league || '—') + (t.is_vip ? '<span class="vip-tag">VIP</span>' : '') + '</div>' +
-          '<div class="title">' + t.home_team + ' vs ' + t.away_team + '</div>' +
+          '<div class="meta">' + (t.league || '—') + (t.isVip ? '<span class="vip-tag">VIP</span>' : '') + '</div>' +
+          '<div class="title">' + t.homeTeam + ' vs ' + t.awayTeam + '</div>' +
           '<div class="sub">' + (t.market || '') + (t.odds ? ' @ ' + t.odds : '') + '</div>' +
         '</div>' +
-        '<div class="actions"><button class="action-remove" onclick="removeTip(' + t.id + ')">Remove</button></div>' +
+        '<div class="actions"><button class="action-remove" data-id="' + t.id + '">Remove</button></div>' +
       '</div>'
     ).join('') || '<p class="empty">No tips yet.</p>';
-  }
-  function removeTip(id) {
-    data.tips = data.tips.filter(t => t.id !== id);
-    saveStore(data);
-    renderTips();
-  }
-  document.getElementById('tip-form').addEventListener('submit', function (e) {
-    e.preventDefault();
-    data.tips.unshift({
-      id: Date.now(),
-      league: document.getElementById('t-league').value,
-      home_team: document.getElementById('t-home').value,
-      away_team: document.getElementById('t-away').value,
-      market: document.getElementById('t-market').value,
-      odds: document.getElementById('t-odds').value,
-      confidence: document.getElementById('t-confidence').value,
-      kickoff_time: document.getElementById('t-kickoff').value,
-      is_vip: document.getElementById('t-vip').checked
+
+    list.querySelectorAll('.action-remove').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        await fb.deleteDoc(fb.doc(db, 'tips', btn.dataset.id, 'secure', 'pick')).catch(() => {});
+        await fb.deleteDoc(fb.doc(db, 'tips', btn.dataset.id));
+        renderTips();
+      });
     });
-    saveStore(data);
+  }
+  document.getElementById('tip-form').addEventListener('submit', async function (e) {
+    e.preventDefault();
+    const market = document.getElementById('t-market').value;
+    const odds = document.getElementById('t-odds').value;
+
+    const tipRef = await fb.addDoc(fb.collection(db, 'tips'), {
+      league: document.getElementById('t-league').value,
+      homeTeam: document.getElementById('t-home').value,
+      awayTeam: document.getElementById('t-away').value,
+      confidence: document.getElementById('t-confidence').value,
+      kickoffTime: document.getElementById('t-kickoff').value || null,
+      isVip: document.getElementById('t-vip').checked,
+      result: 'pending',
+      createdAt: fb.serverTimestamp()
+    });
+    // market/odds always live in the secure subdoc — public reads join
+    // it back in for free tips, and it stays gated for VIP ones.
+    await fb.setDoc(fb.doc(db, 'tips', tipRef.id, 'secure', 'pick'), { market, odds });
+
     this.reset();
     renderTips();
   });
-  renderTips();
 
   // ---- Packages ----
-  function renderPackages() {
+  async function renderPackages() {
+    const snap = await fb.getDocs(fb.query(fb.collection(db, 'packages'), fb.orderBy('priceUgx')));
+    const packages = snap.docs.map(d => ({ id: d.id, ...d.data() }));
     const list = document.getElementById('packages-list');
-    list.innerHTML = data.packages.map(p =>
+    list.innerHTML = packages.map(p =>
       '<div class="item">' +
         '<div>' +
           '<div class="title">' + p.name + '</div>' +
-          '<div class="sub">' + fmtUGX(p.price_ugx) + ' &middot; ' + p.duration_days + ' day' + (p.duration_days > 1 ? 's' : '') + '</div>' +
+          '<div class="sub">' + fmtUGX(p.priceUgx) + ' &middot; ' + p.durationDays + ' day' + (p.durationDays > 1 ? 's' : '') + '</div>' +
         '</div>' +
-        '<div class="actions"><button class="action-remove" onclick="removePackage(' + p.id + ')">Remove</button></div>' +
+        '<div class="actions"><button class="action-remove" data-id="' + p.id + '">Remove</button></div>' +
       '</div>'
     ).join('') || '<p class="empty">No packages yet.</p>';
-  }
-  function removePackage(id) {
-    data.packages = data.packages.filter(p => p.id !== id);
-    saveStore(data);
-    renderPackages();
-  }
-  document.getElementById('pkg-form').addEventListener('submit', function (e) {
-    e.preventDefault();
-    data.packages.push({
-      id: Date.now(),
-      name: document.getElementById('p-name').value,
-      price_ugx: Number(document.getElementById('p-price').value),
-      duration_days: Number(document.getElementById('p-duration').value) || 1
+
+    list.querySelectorAll('.action-remove').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        await fb.deleteDoc(fb.doc(db, 'packages', btn.dataset.id));
+        renderPackages();
+      });
     });
-    saveStore(data);
+  }
+  document.getElementById('pkg-form').addEventListener('submit', async function (e) {
+    e.preventDefault();
+    await fb.addDoc(fb.collection(db, 'packages'), {
+      name: document.getElementById('p-name').value,
+      priceUgx: Number(document.getElementById('p-price').value),
+      durationDays: Number(document.getElementById('p-duration').value) || 1,
+      createdAt: fb.serverTimestamp()
+    });
     this.reset();
     renderPackages();
   });
-  renderPackages();
 
   // ---- Announcements ----
-  function renderAnnouncements() {
+  async function renderAnnouncements() {
+    const snap = await fb.getDocs(fb.query(fb.collection(db, 'announcements'), fb.orderBy('createdAt', 'desc')));
+    const announcements = snap.docs.map(d => ({ id: d.id, ...d.data() }));
     const list = document.getElementById('announcements-list');
-    list.innerHTML = data.announcements.map(a =>
+    list.innerHTML = announcements.map(a =>
       '<div class="item">' +
         '<div>' +
           (a.title ? '<div class="title">' + a.title + '</div>' : '') +
           '<div class="sub">' + a.message + '</div>' +
         '</div>' +
-        '<div class="actions"><button class="action-remove" onclick="removeAnnouncement(' + a.id + ')">Remove</button></div>' +
+        '<div class="actions"><button class="action-remove" data-id="' + a.id + '">Remove</button></div>' +
       '</div>'
     ).join('') || '<p class="empty">No announcements yet.</p>';
-  }
-  function removeAnnouncement(id) {
-    data.announcements = data.announcements.filter(a => a.id !== id);
-    saveStore(data);
-    renderAnnouncements();
-  }
-  document.getElementById('ann-form').addEventListener('submit', function (e) {
-    e.preventDefault();
-    data.announcements.unshift({
-      id: Date.now(),
-      title: document.getElementById('a-title').value,
-      message: document.getElementById('a-message').value
+
+    list.querySelectorAll('.action-remove').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        await fb.deleteDoc(fb.doc(db, 'announcements', btn.dataset.id));
+        renderAnnouncements();
+      });
     });
-    saveStore(data);
+  }
+  document.getElementById('ann-form').addEventListener('submit', async function (e) {
+    e.preventDefault();
+    await fb.addDoc(fb.collection(db, 'announcements'), {
+      title: document.getElementById('a-title').value,
+      message: document.getElementById('a-message').value,
+      createdAt: fb.serverTimestamp()
+    });
     this.reset();
     renderAnnouncements();
   });
-  renderAnnouncements();
 
   // ---- Ads ----
-  function renderAds() {
+  async function renderAds() {
+    const snap = await fb.getDocs(fb.query(fb.collection(db, 'ads'), fb.orderBy('createdAt', 'desc')));
+    const ads = snap.docs.map(d => ({ id: d.id, ...d.data() }));
     const list = document.getElementById('ads-list');
-    list.innerHTML = data.ads.map(a =>
+    list.innerHTML = ads.map(a =>
       '<div class="item">' +
         '<div>' +
           '<div class="title">' + a.title + '</div>' +
           '<div class="sub">' + (a.active ? 'Active' : 'Paused') + '</div>' +
         '</div>' +
         '<div class="actions">' +
-          '<button class="action-toggle" onclick="toggleAd(' + a.id + ')">' + (a.active ? 'Pause' : 'Activate') + '</button>' +
-          '<button class="action-remove" onclick="removeAd(' + a.id + ')">Remove</button>' +
+          '<button class="action-toggle" data-id="' + a.id + '" data-active="' + a.active + '">' + (a.active ? 'Pause' : 'Activate') + '</button>' +
+          '<button class="action-remove" data-id="' + a.id + '">Remove</button>' +
         '</div>' +
       '</div>'
     ).join('') || '<p class="empty">No adverts yet.</p>';
-  }
-  function toggleAd(id) {
-    data.ads = data.ads.map(a => a.id === id ? { ...a, active: !a.active } : a);
-    saveStore(data);
-    renderAds();
-  }
-  function removeAd(id) {
-    data.ads = data.ads.filter(a => a.id !== id);
-    saveStore(data);
-    renderAds();
-  }
-  document.getElementById('ad-form').addEventListener('submit', function (e) {
-    e.preventDefault();
-    data.ads.push({
-      id: Date.now(),
-      title: document.getElementById('ad-title').value,
-      link_url: document.getElementById('ad-link').value,
-      active: true
+
+    list.querySelectorAll('.action-toggle').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        await fb.updateDoc(fb.doc(db, 'ads', btn.dataset.id), { active: btn.dataset.active !== 'true' });
+        renderAds();
+      });
     });
-    saveStore(data);
+    list.querySelectorAll('.action-remove').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        await fb.deleteDoc(fb.doc(db, 'ads', btn.dataset.id));
+        renderAds();
+      });
+    });
+  }
+  document.getElementById('ad-form').addEventListener('submit', async function (e) {
+    e.preventDefault();
+    await fb.addDoc(fb.collection(db, 'ads'), {
+      title: document.getElementById('ad-title').value,
+      linkUrl: document.getElementById('ad-link').value,
+      active: true,
+      createdAt: fb.serverTimestamp()
+    });
     this.reset();
     renderAds();
   });
-  renderAds();
+
+  // ---- Payments ----
+  async function renderPayments() {
+    const snap = await fb.getDocs(fb.query(fb.collection(db, 'payments'), fb.orderBy('createdAt', 'desc')));
+    const payments = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+    // Look up profile + package names for display (Firestore has no joins)
+    const profileCache = {};
+    const packageCache = {};
+    for (const p of payments) {
+      if (!profileCache[p.userId]) {
+        const s = await fb.getDoc(fb.doc(db, 'profiles', p.userId));
+        profileCache[p.userId] = s.exists() ? s.data() : null;
+      }
+      if (!packageCache[p.packageId]) {
+        const s = await fb.getDoc(fb.doc(db, 'packages', p.packageId));
+        packageCache[p.packageId] = s.exists() ? s.data() : null;
+      }
+    }
+
+    const list = document.getElementById('payments-list');
+    list.innerHTML = payments.map(p => {
+      const profile = profileCache[p.userId];
+      const pkg = packageCache[p.packageId];
+      return '<div class="item">' +
+        '<div>' +
+          '<div class="meta">' + p.provider + ' &middot; ' + p.status.toUpperCase() + '</div>' +
+          '<div class="title">' + (profile ? (profile.name || profile.phone) : 'Unknown user') + '</div>' +
+          '<div class="sub">' + (pkg ? pkg.name : '') + ' &middot; from ' + p.momoNumber + (p.reference ? ' &middot; ref ' + p.reference : '') + '</div>' +
+        '</div>' +
+        (p.status === 'pending'
+          ? '<div class="actions">' +
+              '<button class="action-toggle" data-id="' + p.id + '" data-days="' + (pkg ? pkg.durationDays : 1) + '" data-user="' + p.userId + '" data-act="approve">Approve</button>' +
+              '<button class="action-remove" data-id="' + p.id + '" data-act="reject">Reject</button>' +
+            '</div>'
+          : '') +
+      '</div>';
+    }).join('') || '<p class="empty">No payment submissions yet.</p>';
+
+    list.querySelectorAll('[data-act="approve"]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const days = Number(btn.dataset.days) || 1;
+        const expires = fb.Timestamp.fromMillis(Date.now() + days * 86400000);
+        await fb.updateDoc(fb.doc(db, 'profiles', btn.dataset.user), { vipExpiresAt: expires });
+        await fb.updateDoc(fb.doc(db, 'payments', btn.dataset.id), { status: 'approved' });
+        renderPayments();
+      });
+    });
+    list.querySelectorAll('[data-act="reject"]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        await fb.updateDoc(fb.doc(db, 'payments', btn.dataset.id), { status: 'rejected' });
+        renderPayments();
+      });
+    });
+  }
+
+  // ---- Boot ----
+  checkAdmin().then(ok => {
+    if (!ok) return;
+    renderTips();
+    renderPackages();
+    renderAnnouncements();
+    renderAds();
+    renderPayments();
+  });
 </script>
 </body>
 </html>
