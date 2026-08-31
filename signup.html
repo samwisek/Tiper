@@ -110,63 +110,90 @@
   </form>
 </main>
 
-  <script>
-    // ---- Shared data store (localStorage) ----
-    // Every page reads/writes the same keys so admin edits show up on
-    // the public site immediately. Swap this for real Supabase calls later.
-    const STORE_KEY = 'tipshq_data';
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+    import {
+      getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword,
+      onAuthStateChanged, signOut
+    } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+    import {
+      getFirestore, doc, getDoc, setDoc, updateDoc, deleteDoc, addDoc,
+      collection, getDocs, query, orderBy, where, serverTimestamp, Timestamp
+    } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
-    function seedStore() {
-      if (localStorage.getItem(STORE_KEY)) return;
-      const seed = {
-        tips: [
-          { id: 1, league: 'English Premier League', home_team: 'Arsenal', away_team: 'Chelsea', market: 'Over 2.5 Goals', odds: '1.85', confidence: 'High', kickoff_time: '2026-08-30T16:30', is_vip: false },
-          { id: 2, league: 'Uganda Premier League', home_team: 'KCCA FC', away_team: 'Vipers SC', market: 'Home Win', odds: '2.10', confidence: 'Medium', kickoff_time: '2026-08-29T13:00', is_vip: false },
-          { id: 3, league: 'La Liga', home_team: 'Real Madrid', away_team: 'Sevilla', market: 'Home Win & BTTS', odds: '2.60', confidence: 'High', kickoff_time: '2026-08-30T19:00', is_vip: true },
-          { id: 4, league: 'Serie A', home_team: 'Inter Milan', away_team: 'Roma', market: 'Under 3.5 Goals', odds: '1.45', confidence: 'High', kickoff_time: '2026-08-30T18:00', is_vip: true }
-        ],
-        packages: [
-          { id: 1, name: 'Daily VIP', price_ugx: 5000, duration_days: 1 },
-          { id: 2, name: 'Weekly VIP', price_ugx: 25000, duration_days: 7 },
-          { id: 3, name: 'Monthly VIP', price_ugx: 80000, duration_days: 30 }
-        ],
-        announcements: [
-          { id: 1, title: 'Weekend accumulator dropping Saturday', message: 'VIP members should check the tips page from 9am Saturday for the weekend accumulator.' }
-        ],
-        ads: [
-          { id: 1, title: 'Bet responsibly', link_url: '#', active: true }
-        ],
-        users: []
-      };
-      localStorage.setItem(STORE_KEY, JSON.stringify(seed));
-    }
+    // ---- Paste your Firebase config here ----
+    // Firebase console → Project settings → General → Your apps → SDK setup and config
+    const firebaseConfig = {
+      apiKey: "YOUR_API_KEY",
+      authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
+      projectId: "YOUR_PROJECT_ID",
+      storageBucket: "YOUR_PROJECT_ID.appspot.com",
+      messagingSenderId: "YOUR_SENDER_ID",
+      appId: "YOUR_APP_ID"
+    };
 
-    function getStore() {
-      seedStore();
-      return JSON.parse(localStorage.getItem(STORE_KEY));
-    }
+    const app = initializeApp(firebaseConfig);
+    window.auth = getAuth(app);
+    window.db = getFirestore(app);
+    window.fb = {
+      doc, getDoc, setDoc, updateDoc, deleteDoc, addDoc,
+      collection, getDocs, query, orderBy, where, serverTimestamp, Timestamp,
+      createUserWithEmailAndPassword, signInWithEmailAndPassword, onAuthStateChanged, signOut
+    };
 
-    function saveStore(data) {
-      localStorage.setItem(STORE_KEY, JSON.stringify(data));
-    }
-
-    function fmtUGX(n) {
+    // Turns "0771234567" or "+256771234567" into "256771234567"
+    window.normalizePhone = function (raw) {
+      let p = raw.replace(/[^0-9]/g, '');
+      if (p.startsWith('0')) p = '256' + p.slice(1);
+      if (p.startsWith('256256')) p = p.slice(3);
+      return p;
+    };
+    window.phoneToEmail = function (raw) {
+      return window.normalizePhone(raw) + '@tipshq.local';
+    };
+    window.fmtUGX = function (n) {
       return 'UGX ' + Number(n).toLocaleString('en-UG');
-    }
-
-    function fmtKickoff(iso) {
+    };
+    window.fmtKickoff = function (iso) {
+      if (!iso) return '';
       const d = new Date(iso);
       if (isNaN(d)) return iso;
       return d.toLocaleString('en-UG', { weekday: 'short', hour: '2-digit', minute: '2-digit' });
-    }
+    };
+
+    // Resolves once with the current user (or null) so pages don't have
+    // to guess when auth state is ready.
+    window.authReady = new Promise((resolve) => {
+      window.fb.onAuthStateChanged(window.auth, (user) => resolve(user));
+    });
   </script>
-<script>
-  document.getElementById('signup-form').addEventListener('submit', function (e) {
+<script type="module">
+  document.getElementById('signup-form').addEventListener('submit', async function (e) {
     e.preventDefault();
-    // TODO: replace with real Supabase auth call
     const err = document.getElementById('error');
-    err.textContent = "Sign up isn't connected yet — this is a demo screen.";
-    err.style.display = 'block';
+    err.style.display = 'none';
+
+    const name = document.getElementById('name').value;
+    const phone = document.getElementById('phone').value;
+    const password = document.getElementById('password').value;
+    const normalized = normalizePhone(phone);
+
+    try {
+      const cred = await fb.createUserWithEmailAndPassword(auth, phoneToEmail(phone), password);
+      await fb.setDoc(fb.doc(db, 'profiles', cred.user.uid), {
+        phone: normalized,
+        name: name,
+        isAdmin: false,
+        vipExpiresAt: null,
+        createdAt: fb.serverTimestamp()
+      });
+      location.href = 'index.html';
+    } catch (e2) {
+      err.textContent = e2.code === 'auth/email-already-in-use'
+        ? 'That phone number is already registered — try logging in instead.'
+        : 'Could not sign up. Please try again.';
+      err.style.display = 'block';
+    }
   });
 </script>
 </body>
