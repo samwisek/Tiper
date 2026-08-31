@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Log in | TipsHQ</title>
+<title>Sign up | TipsHQ</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
   <style>
@@ -83,15 +83,18 @@
     <a href="index.html" class="logo">TIPS<span>HQ</span></a>
     <nav class="links">
       <a href="vip.html" style="color:var(--floodlight); font-weight:500;">Go VIP</a>
-      <a href="signup.html" class="btn btn-chalk" style="padding:8px 14px;">Sign up</a>
+      <a href="login.html" class="link-dim">Log in</a>
     </nav>
   </div>
 </header>
 
 <main class="auth">
-  <form class="card" id="login-form">
-    <h1 class="display">Log in</h1>
-    <p class="sub">Use the phone number you signed up with.</p>
+  <form class="card" id="signup-form">
+    <h1 class="display">Create account</h1>
+    <p class="sub">Free tips daily. Upgrade to VIP any time.</p>
+
+    <label for="name">Name</label>
+    <input type="text" id="name" required>
 
     <label for="phone">Phone number</label>
     <input type="tel" id="phone" placeholder="07XXXXXXXX" required>
@@ -101,9 +104,9 @@
 
     <p class="error" id="error" style="display:none;"></p>
 
-    <button type="submit" class="btn btn-primary">Log In</button>
+    <button type="submit" class="btn btn-primary">Sign Up</button>
 
-    <p class="foot-link">No account? <a href="signup.html">Sign up</a></p>
+    <p class="foot-link">Have an account? <a href="login.html">Log in</a></p>
   </form>
 </main>
 
@@ -165,20 +168,30 @@
     });
   </script>
 <script type="module">
-  document.getElementById('login-form').addEventListener('submit', async function (e) {
+  document.getElementById('signup-form').addEventListener('submit', async function (e) {
     e.preventDefault();
     const err = document.getElementById('error');
     err.style.display = 'none';
 
+    const name = document.getElementById('name').value;
     const phone = document.getElementById('phone').value;
     const password = document.getElementById('password').value;
+    const normalized = normalizePhone(phone);
 
     try {
-      await fb.signInWithEmailAndPassword(auth, phoneToEmail(phone), password);
-      const params = new URLSearchParams(location.search);
-      location.href = params.get('next') || 'index.html';
+      const cred = await fb.createUserWithEmailAndPassword(auth, phoneToEmail(phone), password);
+      await fb.setDoc(fb.doc(db, 'profiles', cred.user.uid), {
+        phone: normalized,
+        name: name,
+        isAdmin: false,
+        vipExpiresAt: null,
+        createdAt: fb.serverTimestamp()
+      });
+      location.href = 'index.html';
     } catch (e2) {
-      err.textContent = 'Could not log in — check your phone number and password.';
+      err.textContent = e2.code === 'auth/email-already-in-use'
+        ? 'That phone number is already registered — try logging in instead.'
+        : 'Could not sign up. Please try again.';
       err.style.display = 'block';
     }
   });
