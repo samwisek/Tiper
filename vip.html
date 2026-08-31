@@ -109,89 +109,162 @@
 
 <div class="modal-overlay" id="modal-overlay">
   <div class="modal">
-    <h2 class="display">Payment</h2>
-    <p>MTN &amp; Airtel Mobile Money checkout isn't wired up yet — this is a placeholder for the demo. Real flow: enter number, confirm on phone, VIP unlocks on approval.</p>
-    <button class="btn btn-chalk" style="width:100%;" id="modal-close">Close</button>
+    <h2 class="display" id="modal-title">Confirm payment</h2>
+    <p id="modal-instructions">
+      Send the package amount via MTN or Airtel Mobile Money, then fill in
+      the details below so we can confirm it. VIP unlocks once approved.
+    </p>
+    <form id="pay-form">
+      <label style="display:block; font-size:14px; color:var(--chalk-dim); margin-bottom:6px;">Network</label>
+      <select id="pay-provider" style="width:100%; background:var(--pitch); border:1px solid rgba(255,255,255,0.15); border-radius:6px; padding:10px 12px; color:var(--chalk); font-size:14px; margin-bottom:14px;">
+        <option value="MTN">MTN Mobile Money</option>
+        <option value="Airtel">Airtel Money</option>
+      </select>
+      <label style="display:block; font-size:14px; color:var(--chalk-dim); margin-bottom:6px;">Number you paid from</label>
+      <input type="tel" id="pay-number" placeholder="07XXXXXXXX" required style="width:100%; background:var(--pitch); border:1px solid rgba(255,255,255,0.15); border-radius:6px; padding:10px 12px; color:var(--chalk); font-size:14px; margin-bottom:14px;">
+      <label style="display:block; font-size:14px; color:var(--chalk-dim); margin-bottom:6px;">Transaction ID / reference</label>
+      <input type="text" id="pay-reference" placeholder="e.g. MP240829.1234" style="width:100%; background:var(--pitch); border:1px solid rgba(255,255,255,0.15); border-radius:6px; padding:10px 12px; color:var(--chalk); font-size:14px; margin-bottom:16px;">
+      <p class="error" id="pay-error" style="display:none; color:var(--loss); font-size:14px; margin:0 0 12px;"></p>
+      <p class="error" id="pay-success" style="display:none; color:var(--win); font-size:14px; margin:0 0 12px;"></p>
+      <button type="submit" class="btn btn-primary" style="width:100%; margin-bottom:8px;">Submit for approval</button>
+      <button type="button" class="btn btn-outline" style="width:100%;" id="modal-close">Cancel</button>
+    </form>
   </div>
 </div>
 
-  <script>
-    // ---- Shared data store (localStorage) ----
-    // Every page reads/writes the same keys so admin edits show up on
-    // the public site immediately. Swap this for real Supabase calls later.
-    const STORE_KEY = 'tipshq_data';
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+    import {
+      getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword,
+      onAuthStateChanged, signOut
+    } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+    import {
+      getFirestore, doc, getDoc, setDoc, updateDoc, deleteDoc, addDoc,
+      collection, getDocs, query, orderBy, where, serverTimestamp, Timestamp
+    } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
-    function seedStore() {
-      if (localStorage.getItem(STORE_KEY)) return;
-      const seed = {
-        tips: [
-          { id: 1, league: 'English Premier League', home_team: 'Arsenal', away_team: 'Chelsea', market: 'Over 2.5 Goals', odds: '1.85', confidence: 'High', kickoff_time: '2026-08-30T16:30', is_vip: false },
-          { id: 2, league: 'Uganda Premier League', home_team: 'KCCA FC', away_team: 'Vipers SC', market: 'Home Win', odds: '2.10', confidence: 'Medium', kickoff_time: '2026-08-29T13:00', is_vip: false },
-          { id: 3, league: 'La Liga', home_team: 'Real Madrid', away_team: 'Sevilla', market: 'Home Win & BTTS', odds: '2.60', confidence: 'High', kickoff_time: '2026-08-30T19:00', is_vip: true },
-          { id: 4, league: 'Serie A', home_team: 'Inter Milan', away_team: 'Roma', market: 'Under 3.5 Goals', odds: '1.45', confidence: 'High', kickoff_time: '2026-08-30T18:00', is_vip: true }
-        ],
-        packages: [
-          { id: 1, name: 'Daily VIP', price_ugx: 5000, duration_days: 1 },
-          { id: 2, name: 'Weekly VIP', price_ugx: 25000, duration_days: 7 },
-          { id: 3, name: 'Monthly VIP', price_ugx: 80000, duration_days: 30 }
-        ],
-        announcements: [
-          { id: 1, title: 'Weekend accumulator dropping Saturday', message: 'VIP members should check the tips page from 9am Saturday for the weekend accumulator.' }
-        ],
-        ads: [
-          { id: 1, title: 'Bet responsibly', link_url: '#', active: true }
-        ],
-        users: []
-      };
-      localStorage.setItem(STORE_KEY, JSON.stringify(seed));
-    }
+    // ---- Paste your Firebase config here ----
+    // Firebase console → Project settings → General → Your apps → SDK setup and config
+    const firebaseConfig = {
+      apiKey: "YOUR_API_KEY",
+      authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
+      projectId: "YOUR_PROJECT_ID",
+      storageBucket: "YOUR_PROJECT_ID.appspot.com",
+      messagingSenderId: "YOUR_SENDER_ID",
+      appId: "YOUR_APP_ID"
+    };
 
-    function getStore() {
-      seedStore();
-      return JSON.parse(localStorage.getItem(STORE_KEY));
-    }
+    const app = initializeApp(firebaseConfig);
+    window.auth = getAuth(app);
+    window.db = getFirestore(app);
+    window.fb = {
+      doc, getDoc, setDoc, updateDoc, deleteDoc, addDoc,
+      collection, getDocs, query, orderBy, where, serverTimestamp, Timestamp,
+      createUserWithEmailAndPassword, signInWithEmailAndPassword, onAuthStateChanged, signOut
+    };
 
-    function saveStore(data) {
-      localStorage.setItem(STORE_KEY, JSON.stringify(data));
-    }
-
-    function fmtUGX(n) {
+    // Turns "0771234567" or "+256771234567" into "256771234567"
+    window.normalizePhone = function (raw) {
+      let p = raw.replace(/[^0-9]/g, '');
+      if (p.startsWith('0')) p = '256' + p.slice(1);
+      if (p.startsWith('256256')) p = p.slice(3);
+      return p;
+    };
+    window.phoneToEmail = function (raw) {
+      return window.normalizePhone(raw) + '@tipshq.local';
+    };
+    window.fmtUGX = function (n) {
       return 'UGX ' + Number(n).toLocaleString('en-UG');
-    }
-
-    function fmtKickoff(iso) {
+    };
+    window.fmtKickoff = function (iso) {
+      if (!iso) return '';
       const d = new Date(iso);
       if (isNaN(d)) return iso;
       return d.toLocaleString('en-UG', { weekday: 'short', hour: '2-digit', minute: '2-digit' });
-    }
+    };
+
+    // Resolves once with the current user (or null) so pages don't have
+    // to guess when auth state is ready.
+    window.authReady = new Promise((resolve) => {
+      window.fb.onAuthStateChanged(window.auth, (user) => resolve(user));
+    });
   </script>
-<script>
-  const data = getStore();
-  let selectedId = data.packages[1] ? data.packages[1].id : (data.packages[0] && data.packages[0].id);
+<script type="module">
+  let packages = [];
+  let selectedId = null;
 
   function render() {
-    document.getElementById('packages').innerHTML = data.packages.map(p =>
+    document.getElementById('packages').innerHTML = packages.map(p =>
       '<div class="pkg' + (p.id === selectedId ? ' selected' : '') + '" data-id="' + p.id + '">' +
         '<div class="name">' + p.name + '</div>' +
-        '<div class="price display">' + fmtUGX(p.price_ugx) + '</div>' +
-        '<div class="dur">' + p.duration_days + ' day' + (p.duration_days > 1 ? 's' : '') + ' access</div>' +
+        '<div class="price display">' + fmtUGX(p.priceUgx) + '</div>' +
+        '<div class="dur">' + p.durationDays + ' day' + (p.durationDays > 1 ? 's' : '') + ' access</div>' +
       '</div>'
     ).join('');
 
     document.querySelectorAll('.pkg').forEach(el => {
       el.addEventListener('click', () => {
-        selectedId = Number(el.dataset.id);
+        selectedId = el.dataset.id;
         render();
       });
     });
   }
-  render();
 
-  document.getElementById('pay-btn').addEventListener('click', () => {
+  async function loadPackages() {
+    const snap = await fb.getDocs(fb.query(fb.collection(db, 'packages'), fb.orderBy('priceUgx')));
+    packages = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    selectedId = packages[1] ? packages[1].id : (packages[0] && packages[0].id);
+    render();
+  }
+  loadPackages();
+
+  document.getElementById('pay-btn').addEventListener('click', async () => {
+    const user = await authReady;
+    if (!user) {
+      location.href = 'login.html?next=vip.html';
+      return;
+    }
     document.getElementById('modal-overlay').classList.add('open');
   });
   document.getElementById('modal-close').addEventListener('click', () => {
     document.getElementById('modal-overlay').classList.remove('open');
+  });
+
+  document.getElementById('pay-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const errEl = document.getElementById('pay-error');
+    const okEl = document.getElementById('pay-success');
+    errEl.style.display = 'none';
+    okEl.style.display = 'none';
+
+    const user = await authReady;
+    if (!user) {
+      location.href = 'login.html?next=vip.html';
+      return;
+    }
+    if (!selectedId) {
+      errEl.textContent = 'Pick a package first.';
+      errEl.style.display = 'block';
+      return;
+    }
+
+    try {
+      await fb.addDoc(fb.collection(db, 'payments'), {
+        userId: user.uid,
+        packageId: selectedId,
+        provider: document.getElementById('pay-provider').value,
+        momoNumber: normalizePhone(document.getElementById('pay-number').value),
+        reference: document.getElementById('pay-reference').value,
+        status: 'pending',
+        createdAt: fb.serverTimestamp()
+      });
+      okEl.textContent = 'Submitted! Your VIP access activates once the admin approves the payment.';
+      okEl.style.display = 'block';
+      document.getElementById('pay-form').reset();
+    } catch (e2) {
+      errEl.textContent = 'Could not submit — please try again.';
+      errEl.style.display = 'block';
+    }
   });
 </script>
 </body>
